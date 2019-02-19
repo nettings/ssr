@@ -8,8 +8,8 @@ dnl see http://www.gnu.org/software/autoconf/manual/ for further information
 
 dnl Ensure that a recent enough version of Autoconf is being used.
 dnl Only from version 2.65 PACKAGE_URL will be set in config.h.
-dnl see http://www.mail-archive.com/autoconf@gnu.org/msg19725.html 
-dnl see http://www.gnu.org/software/autoconf/manual/autoconf.html#Versioning 
+dnl see http://www.mail-archive.com/autoconf@gnu.org/msg19725.html
+dnl see http://www.gnu.org/software/autoconf/manual/autoconf.html#Versioning
 AC_PREREQ([2.65])
 
 dnl initialize autoconf, this should be the first thing in configure.ac
@@ -53,10 +53,10 @@ dnl Compute the canonical host-system type variable, 'host', and its three
 dnl individual parts 'host_cpu', 'host_vendor', and 'host_os'.
 dnl AC_CANONICAL_HOST
 
-dnl Runs many macros required for proper operation of the generated Makefiles. 
+dnl Runs many macros required for proper operation of the generated Makefiles.
 dnl see http://sources.redhat.com/automake/automake.html#Options for options
 dnl
-dnl We use the option "foreign" because we do not provide a ChangeLog-file. 
+dnl We use the option "foreign" because we do not provide a ChangeLog-file.
 dnl Major changes are documented in the NEWS file.
 AM_INIT_AUTOMAKE([foreign std-options subdir-objects -Wall])
 
@@ -71,9 +71,9 @@ PKG_PROG_PKG_CONFIG
 dnl Create header file(s) with C preprocessor #define statements (e.g. ENABLE_*)
 AC_CONFIG_HEADERS(src/config.h)
 
-dnl AM_MAINTAINER_MODE enables automatic rebuild rules only using 
+dnl AM_MAINTAINER_MODE enables automatic rebuild rules only using
 dnl ./configure --enable-maintainer-mode. This can lead to insecurity.
-dnl We avoid using this Macro. 
+dnl We avoid using this Macro.
 dnl see: http://www.gnu.org/software/hello/manual/automake/maintainer_002dmode.html#maintainer_002dmode
 dnl see: https://cims.nyu.edu/cgi-systems/info2html?(automake)Rebuilding
 
@@ -114,13 +114,13 @@ dnl TODO: check if we need AM_PROG_CC_C_O!
 dnl AM_PROG_CC_C_O
 
 dnl Macro AC_PROG_LD is obsolete.
-dnl Please use LT_PATH_LD when necessity is discovered. 
+dnl Please use LT_PATH_LD when necessity is discovered.
 dnl see: http://lists.gnu.org/archive/html/autoconf/2010-05/msg00016.html
 dnl AC_PROG_LD
 
 dnl Check how the architecture deals with big-endian.
 dnl The default for action-if-true is to define ‘WORDS_BIGENDIAN’. The default
-dnl for action-if-false is to do nothing. 
+dnl for action-if-false is to do nothing.
 dnl AC_C_BIGENDIAN
 
 dnl AC_DEFINE writes values in config.h
@@ -175,10 +175,10 @@ ENABLE_AUTO([generic], [generic renderer],
     [SSR_executables="$SSR_executables ssr-generic"])
 ])
 
-ENABLE_AUTO([nfc-hoa],[Near-Field-Compensated Higher-Order-Ambisonics renderer],
+ENABLE_AUTO([dca],[Distance-coded Ambisonics renderer],
 [
-  AS_IF([test x$enable_nfc_hoa = xyes -o x$have_all = xyes],
-    [SSR_executables="$SSR_executables ssr-nfc-hoa"])
+  AS_IF([test x$enable_dca = xyes -o x$have_all = xyes],
+    [SSR_executables="$SSR_executables ssr-dca"])
 ])
 
 dnl Note: For what happens with SSR_executables see src/Makefile.am
@@ -227,14 +227,18 @@ AS_IF([test x$have_debugging = xyes],
 dnl overwrite default CXXFLAGS set by AC_PROG_CXX
 AS_IF([test x$usercxxflags = xno], [CXXFLAGS="-g"])
 
-dnl select C++11 (unconditionally)
-CXXFLAGS="$CXXFLAGS -std=c++11"
-AC_MSG_CHECKING([if $CXX supports "-std=c++11"])
+dnl select C++17 (unconditionally)
+CXXFLAGS="$CXXFLAGS -std=c++17"
+AC_MSG_CHECKING([if $CXX supports "-std=c++17"])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM()], AC_MSG_RESULT([yes]),
 [
   AC_MSG_RESULT([no])
-  AC_MSG_ERROR([C++11 not supported! Please upgrade.])
+  AC_MSG_ERROR([C++17 not supported! Please upgrade.])
 ])
+
+dnl JACK1 problem with C++17: https://github.com/jackaudio/jack1/issues/84
+AS_IF([test x$GCC = xyes],
+      [WARNING_FLAGS="$WARNING_FLAGS -Wno-register"])
 
 dnl see http://www.open-std.org/JTC1/SC22/WG21/docs/cwg_defects.html#1123
 dnl and http://stackoverflow.com/q/11497252/500098
@@ -250,7 +254,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 ])
 
 dnl NOTE: -pthread works on GCC, other compilers may need differnt flags!
-AS_IF([test x$GCC = xyes -a x$usercxxflags = xno],
+AS_IF([test x$GCC = xyes],
       [CXXFLAGS="$CXXFLAGS -pthread"])
 
 ENABLE_AUTO([optimization], [code optimization],
@@ -266,9 +270,9 @@ ENABLE_AUTO([optimization], [code optimization],
 
     dnl OPT_FLAGS="$OPT_FLAGS -fexpensive-optimizations"
 
-    dnl its a little sad that OS X doesn't make it possible to identify 
+    dnl its a little sad that OS X doesn't make it possible to identify
     dnl the target_cpu a little more precisely. on os x we always get "i386"
-    dnl as the CPU type. we miss out on some possible optimizations as 
+    dnl as the CPU type. we miss out on some possible optimizations as
     dnl a result. oh well.
     dnl anyway, the user can specify -march with CXXFLAGS, if desired
     AS_IF([test $target_cpu = i586],   [OPT_FLAGS="$OPT_FLAGS -march=i586"],
@@ -464,7 +468,7 @@ dnl enable/disable GUI, default: enabled
 ENABLE_FORCED([gui], [graphical user interface (using Qt)],
 [
   # Checking for Qt
-  PKG_CHECK_MODULES([QT], [QtCore >= 4.2.2 QtGui >= 4.2.2 QtOpenGL >= 4.2.2]
+  PKG_CHECK_MODULES([QT], [Qt5Core >= 5.0.0 Qt5Gui >= 5.0.0 Qt5OpenGL >= 5.0.0]
     ,
     , [have_gui=no])
 
@@ -488,41 +492,34 @@ AS_IF([test x$have_gui = xyes],
   # settings for Qt
   LIBS="$LIBS $QT_LIBS"
   PKG_FLAGS="$PKG_FLAGS $QT_CFLAGS"
+  AC_MSG_CHECKING([if we have to add -fPIC to make Qt happy])
+  CPPFLAGS_backup="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $QT_CFLAGS"
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+  [
+    #include <QtCore/QObject>
+  ], [])], AC_MSG_RESULT([no]),
+  [
+    AC_MSG_RESULT([yes])
+    PKG_FLAGS="$PKG_FLAGS -fPIC"
+  ])
+  CPPFLAGS="$CPPFLAGS_backup"
   MOCFLAGS="$QT_CFLAGS"
   AS_IF([which moc 2>&1 >/dev/null],
   [
     QTMOC="moc"
   ],
   [
-    QTMOC=`$PKG_CONFIG --variable=moc_location QtCore`
+    QTMOC=`$PKG_CONFIG --variable=moc_location Qt5Core`
   ])
-  QTLIBDIR=`$PKG_CONFIG --variable=libdir QtGui`
+  QTLIBDIR=`$PKG_CONFIG --variable=libdir Qt5Gui`
 
   AC_SUBST(QTMOC)
   AC_SUBST(QTLIBDIR)
   AC_SUBST(MOCFLAGS)
-
-  # check if floating control panel has to be forced
-  PKG_CHECK_MODULES([QtGui_4_7_or_higher], [QtGui >= 4.7.0],
-  [
-    AS_IF([test x$enable_floating_control_panel = xno],
-    [
-      AC_MSG_ERROR([With Qt >= 4.7 the floating control panel is obligatory!])
-    ],
-    [test x$enable_floating_control_panel = x],
-    [
-      AC_MSG_WARN([Found Qt >= 4.7, forcing --enable-floating-control-panel!])
-      enable_floating_control_panel=yes
-    ])
-  ], [true])
 ])
 
-ENABLE_EXPLICIT([floating-control-panel], [separate control window],
-[
-  AS_IF([test x$have_gui = xno], [have_floating_control_panel=no])
-])
-
-ENABLE_FORCED([ip-interface], [network (TCP/IP) interface (needs libasio, https://think-async.com/)],
+ENABLE_FORCED([ip-interface], [network (TCP/IP) interface (needs Asio, https://think-async.com/)],
 [
   CPPFLAGS="$CPPFLAGS -DASIO_STANDALONE"
   AC_CHECK_HEADER([asio.hpp], , [have_ip_interface=no])
@@ -531,8 +528,8 @@ ENABLE_FORCED([ip-interface], [network (TCP/IP) interface (needs libasio, https:
 ENABLE_FORCED([ecasound], [Ecasound soundfile playback/recording],
 [
   dnl Checking for libecasoundc. It does not provide pkg-config and installs
-  dnl on some systems to non standard path /usr/include/libecasoundc. 
-  AC_MSG_CHECKING([Searching for non-default libecasoundc include directory])
+  dnl on some systems to non-standard path /usr/include/libecasoundc.
+  AC_MSG_CHECKING([for non-default libecasoundc include directory])
   for incdir in /{usr,opt}/{,local/}include/libecasoundc; do
     AS_IF([test -d $incdir], [ECASOUND_INCLUDE="$incdir"])
   done
@@ -588,6 +585,7 @@ ENABLE_AUTO([vrpn], [VRPN tracker support],
   AC_MSG_CHECKING([various header files for VRPN tracker support])
   AC_MSG_RESULT([see below])
   AC_CHECK_HEADER([vrpn_Tracker.h],   , [have_vrpn=no])
+  AC_SEARCH_LIBS([q_from_axis_angle], [quat], , [have_vrpn=no])
   AC_SEARCH_LIBS([vrpn_MAGIC], [vrpn], , [have_vrpn=no])
   AC_MSG_CHECKING([VRPN tracker support])
   AC_MSG_RESULT([$have_vrpn])
@@ -601,7 +599,7 @@ ENABLE_AUTO([intersense], [InterSense tracker support],
 
   dnl the InterSense people changed the API with version 4.04!
 
-  dnl Checking for InterSense header 
+  dnl Checking for InterSense header
   AC_CHECK_HEADER([isense.h], , [have_intersense=no])
   AC_CHECK_HEADER([types.h],  , [have_intersense=no])
 
@@ -758,8 +756,7 @@ AS_IF([test x$have_intersense = xyes],
 
 gui_string=$have_gui
 AS_IF([test x$have_gui = xyes],
-  AS_IF([test x$have_floating_control_panel = xyes],
-    [gui_string="yes (floating)"]))
+  [gui_string="yes"])
 
 echo "|"
 echo "| Build with tracker support:"
@@ -804,6 +801,3 @@ echo 'If everything looks OK, continue with "make" and "make dmg".'
 echo 'If everything looks OK, continue with "make" and "make install".'
 ])
 echo
-
-dnl Settings for Vim (http://www.vim.org/), please do not remove:
-dnl vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:comments+=bO\:dnl

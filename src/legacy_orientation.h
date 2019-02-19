@@ -24,12 +24,59 @@
  * http://spatialaudio.net/ssr                           ssr@spatialaudio.net *
  ******************************************************************************/
 
-// NFC-HOA renderer as Puredata/Max external.
+/// @file
+/// Legacy 2D %Orientation class and helper function(s) (definition).
 
-#include "ssr_flext.h"
-#include "nfchoarenderer.h"
+#ifndef SSR_LEGACY_ORIENTATION_H
+#define SSR_LEGACY_ORIENTATION_H
 
-SSR_FLEXT_INSTANCE(nfc_hoa, ssr::NfcHoaRenderer)
+#include <iosfwd>
 
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent
+#include "api.h"  // for Rot
+
+/** Geometric representation of a orientation.
+ * For now, only azimuth value is handled.
+ **/
+struct Orientation
+{
+  explicit Orientation(const float azimuth = 0);
+
+  Orientation(const ssr::Rot& three_d_rot);
+
+  operator ssr::Rot();
+
+  float azimuth; ///< (=yaw) azimuth (in degrees)
+
+  /// plus (+) operator
+  friend Orientation operator+(const Orientation& lhs, const Orientation& rhs);
+  /// minus (-) operator
+  friend Orientation operator-(const Orientation& lhs, const Orientation& rhs);
+  /// unary minus (-) operator
+  friend Orientation operator-(const Orientation& rhs);
+
+  Orientation& operator+=(const Orientation& other);
+  Orientation& operator-=(const Orientation& other);
+
+  /// turn
+  Orientation& rotate(float angle);
+  Orientation& rotate(const Orientation& rotation);
+
+  friend std::ostream& operator<<(std::ostream& stream,
+      const Orientation& orientation);
+
+  /** division (/) operator.
+   * @param a dividend, a DirectionalPoint.
+   * @param b divisor, any numeric Type..
+   * @return quotient.
+   **/
+  template <typename T>
+  friend Orientation operator/(const Orientation& a, const T& b)
+  {
+    return Orientation(a.azimuth / b);
+  }
+};
+
+/// Angle (in radians) between two orientations.
+float angle(const Orientation& a, const Orientation& b);
+
+#endif

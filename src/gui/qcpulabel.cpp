@@ -26,10 +26,10 @@
 
 /// @file
 /// TODO: add description
-
-#include <QPainter>
-#include <QTimer>
 #include <algorithm>
+
+#include <QtCore/QTimer>
+#include <QtGui/QPainter>
 
 #include "qcpulabel.h"
 
@@ -93,10 +93,7 @@ void QCPULabel::paintEvent(QPaintEvent * event)
   //setText(QString().setNum((int)(load + 0.5f)));
 
   // quick-hack
-  painter.setPen(QPen(QColor(0, 0, 0))); 
+  painter.setPen(QPen(QColor(0, 0, 0)));
   painter.drawText(QRect(0, 1, width(), height()), Qt::AlignCenter, QString().setNum((int)(load + 0.5f)));
 
 }
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

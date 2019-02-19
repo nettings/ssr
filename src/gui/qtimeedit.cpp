@@ -30,7 +30,7 @@
 #include "qtimeedit.h"
 //#include "ssr_global.h"
 
-QTimeEdit::QTimeEdit(QWidget* parent) : QLineEdit(parent)
+QSSRTimeEdit::QSSRTimeEdit(QWidget* parent) : QLineEdit(parent)
 {
   QString qt_style_sheet = "* { background-color: white; \n"
                                "border-radius: 0;       \n"
@@ -40,13 +40,12 @@ QTimeEdit::QTimeEdit(QWidget* parent) : QLineEdit(parent)
   this->setStyleSheet(qt_style_sheet);
 }
 
-void QTimeEdit::keyPressEvent(QKeyEvent *event)
+QSSRTimeEdit::~QSSRTimeEdit(){}
+
+void QSSRTimeEdit::keyPressEvent(QKeyEvent *event)
 {
   QLineEdit::keyPressEvent(event);
 
   // to avoid propagating of RETURN to main widget
   event->accept();
 }
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

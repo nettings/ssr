@@ -26,20 +26,21 @@
 
 /// @file
 /// TODO: add description
-
-#include <QResizeEvent>
-#include <QMouseEvent>
-#include <QFileDialog>
-#include <QMessageBox>
-#include <QHBoxLayout>
-#include <QVBoxLayout>
-#include <QMenu>
-#include <QTimer>
-#include <QApplication>
-#include <QDesktopWidget>
 #include <string>
 #include <fstream>
 #include <cmath>
+
+#include <QtCore/QTimer>
+#include <QtGui/QMouseEvent>
+#include <QtGui/QResizeEvent>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QDesktopWidget>
+#include <QtWidgets/QFileDialog>
+#include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QMessageBox>
+#include <QtWidgets/QVBoxLayout>
+#include <QMimeData>
 
 #include "quserinterface.h"
 #include "apf/math.h"
@@ -49,6 +50,7 @@ using apf::math::linear2dB;
 
 #include "apf/stringtools.h"
 #include "posixpathtools.h"
+#include "legacy_scene.h"  // for LegacyScene
 
 #define FILEMENUWIDTH 128
 #define BETWEENBUTTONSPACE 6
@@ -81,7 +83,8 @@ using apf::math::linear2dB;
  * @param parent parent Qt widget. If left as \a NULL (default) then the window
  * is startet as an independent main window.
  **/
-ssr::QUserInterface::QUserInterface(Publisher& controller, const Scene& scene
+ssr::QUserInterface::QUserInterface(api::Publisher& controller
+        , const LegacyScene& scene
         , const std::string& path_to_gui_images
         , const std::string& path_to_scene_menu
         , unsigned int update_frequency
@@ -92,7 +95,7 @@ ssr::QUserInterface::QUserInterface(Publisher& controller, const Scene& scene
     _controlsParent(this)
 {
   // set window title
-  std::string type = _controller.get_renderer_name();
+  std::string type = _scene.get_renderer_name();
   if      (type == "wfs")        setWindowTitle("SSR - WFS");
   else if (type == "binaural")   setWindowTitle("SSR - Binaural");
   else if (type == "brs")        setWindowTitle("SSR - BRS");
@@ -113,28 +116,27 @@ ssr::QUserInterface::QUserInterface(Publisher& controller, const Scene& scene
 
   // set default size
   setGeometry(200, 100, 900, 800);
-  
-#ifdef ENABLE_FLOATING_CONTROL_PANEL
+
   // TODO: use screen size for initial window positions
   //QRect screenSize = QApplication::desktop()->screenGeometry();
   setGeometry(200, 70, 900, 700);
+
+  setAcceptDrops(true);
+
   _controlsParent = new QLabel(this, Qt::Window | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
   _controlsParent->setFixedSize(900, 75);
   _controlsParent->move(200, 780);
   _controlsParent->setWindowTitle("Controls");
   _controlsParent->installEventFilter(this);
   _controlsParent->show();
-#else
-  // build up frame around OpenGL window
-  _frame = new QGUIFrame(this);
-#endif
+  _controlsParent->raise();
 
   _source_properties = new QSourceProperties(this);
   connect(_source_properties, SIGNAL(signal_set_source_mute(bool)), this, SLOT(_set_source_mute(bool)));
   connect(_source_properties, SIGNAL(signal_set_source_position_fixed(bool)), this, SLOT(_set_source_position_fixed(bool)));
   connect(_source_properties, SIGNAL(signal_set_source_model(int)), this, SLOT(_set_source_model(int)));
   _source_properties->hide();
-  
+
   // set window icon
   QString path_to_image( _path_to_gui_images.c_str() ) ;
   setWindowIcon(QIcon(QPixmap(path_to_image.append("/ssr_logo_large.png"))));
@@ -237,23 +239,18 @@ ssr::QUserInterface::QUserInterface(Publisher& controller, const Scene& scene
   // functional inits
   _deselect_all_sources(); // no source selected
 
-#ifdef ENABLE_FLOATING_CONTROL_PANEL
   // scene menu is not shown if floating control panel is used
   VERBOSE("Floating control panel is used, scene menu will not be shown.");
   (void)path_to_scene_menu;
-#else
-  // create the scene menu if an according config file is present
-  _create_scene_menu(path_to_scene_menu);
-#endif
 
   // update screen with update_frequency
   QTimer *timer = new QTimer(this);
   connect(timer, SIGNAL(timeout()), this, SLOT(_update_screen()));
   timer->start(static_cast<unsigned int>(1.0f/static_cast<float>(update_frequency) * 1000.0f));
 
-#ifdef ENABLE_FLOATING_CONTROL_PANEL
+  _set_zoom(100);
+
   _resizeControls(_controlsParent->width());
-#endif
 }
 
 /// Dtor.
@@ -264,7 +261,7 @@ ssr::QUserInterface::~QUserInterface()
   // clear memory if scene button list has been in use
   if (!_scene_button_list.empty())
   {
-    for (scene_button_list_t::iterator i = _scene_button_list.begin(); 
+    for (scene_button_list_t::iterator i = _scene_button_list.begin();
 	 i != _scene_button_list.end(); i++)
     {
       delete *i;
@@ -277,7 +274,7 @@ ssr::QUserInterface::~QUserInterface()
 /// Skips back to the beginning of the scene
 void ssr::QUserInterface::_skip_back()
 {
-  _controller.transport_locate(0);
+  _transport_locate(0);
 }
 
 /** Skips the scene to a specified instant of time
@@ -287,9 +284,9 @@ void ssr::QUserInterface::_transport_locate(float time)
 {
   if (time >= 0.0f)
   {
-    _controller.transport_locate(time);
+    _controller.take_control()->transport_locate(time);
   }
-  else 
+  else
   {
     _skip_back();
   }
@@ -303,14 +300,16 @@ void ssr::QUserInterface::_solo_selected_sources()
 {
   _soloed_sources.clear();
 
-  for (selected_sources_map_t::iterator i = _selected_sources_map.begin(); 
+  auto control = _controller.take_control();
+
+  for (selected_sources_map_t::iterator i = _selected_sources_map.begin();
        i != _selected_sources_map.end(); i++)
   {
     _soloed_sources.insert(i->second);
 
     // make sure it's not muted
-    _controller.set_source_mute(i->second, false);
-   
+    control->source_mute(_scene.string_id(i->second), false);
+
   } // for
 
   // get sources
@@ -318,14 +317,14 @@ void ssr::QUserInterface::_solo_selected_sources()
   _scene.get_sources(source_buffer_list);
 
   // mute other sources
-  for (source_buffer_list_t::const_iterator i = source_buffer_list.begin(); 
+  for (source_buffer_list_t::const_iterator i = source_buffer_list.begin();
        i != source_buffer_list.end(); i++)
   {
     // if source is not soloed
     if (_soloed_sources.find(i->id) == _soloed_sources.end())
     {
       // then mute it
-      _controller.set_source_mute(i->id, true);
+      control->source_mute(_scene.string_id(i->id), true);
     }
   }
 
@@ -335,7 +334,7 @@ void ssr::QUserInterface::_solo_selected_sources()
 /// this function is not so useful
 void ssr::QUserInterface::_unsolo_selected_sources()
 {
-  for (selected_sources_map_t::iterator i = _selected_sources_map.begin(); 
+  for (selected_sources_map_t::iterator i = _selected_sources_map.begin();
        i != _selected_sources_map.end(); i++)
   {
     _soloed_sources.erase(i->second);
@@ -349,51 +348,15 @@ void ssr::QUserInterface::_unsolo_selected_sources()
   // if other sources are soloed
   else
   {
-    for (selected_sources_map_t::iterator i = _selected_sources_map.begin(); 
+    auto control = _controller.take_control();
+    for (selected_sources_map_t::iterator i = _selected_sources_map.begin();
 	 i != _selected_sources_map.end(); i++)
     {
       // then mute the unsoloed sources
-      _controller.set_source_mute(i->second, true); 
+      control->source_mute(_scene.string_id(i->second), true);
     } // for
   }
 
-}
-
-void ssr::QUserInterface::_toggle_solo_state_of_selected_sources()
-{
-  for (selected_sources_map_t::iterator i = _selected_sources_map.begin(); 
-       i != _selected_sources_map.end(); i++)
-  {
-    if (_soloed_sources.find(i->second) == _soloed_sources.end())
-    {
-      // solo source
-      _soloed_sources.insert(i->second); 
-    }
-    else 
-    {
-      // unsolo source
-      _soloed_sources.erase(i->second);
-    }
-  } // for
-
-  // get sources
-  source_buffer_list_t source_buffer_list;
-  _scene.get_sources(source_buffer_list);
-
-  for (source_buffer_list_t::const_iterator i = source_buffer_list.begin(); 
-       i != source_buffer_list.end(); i++)
-  {
-    if (_soloed_sources.find(i->id) == _soloed_sources.end())
-    {
-      // mute 
-      _controller.set_source_mute(i->id, true);
-    }
-    else 
-    {
-      // unmute
-      _controller.set_source_mute(i->id, false);
-    }
-  }
 }
 
 void ssr::QUserInterface::_unsolo_all_sources()
@@ -404,36 +367,30 @@ void ssr::QUserInterface::_unsolo_all_sources()
   source_buffer_list_t source_buffer_list;
   _scene.get_sources(source_buffer_list);
 
-  for (source_buffer_list_t::const_iterator i = source_buffer_list.begin(); 
+  auto control = _controller.take_control();
+  for (source_buffer_list_t::const_iterator i = source_buffer_list.begin();
        i != source_buffer_list.end(); i++)
   {
-    _controller.set_source_mute(i->id, false);
+    control->source_mute(_scene.string_id(i->id), false);
   }
 }
 
 /// This slot is called when the \a processing \a button was clicked by the user.
 void ssr::QUserInterface::_processing_button_pressed()
 {
-  if(_scene.get_processing_state())
-  {
-    _controller.stop_processing();
-  }
-  else
-  {
-    _controller.start_processing();
-  }
+  _controller.take_control()->processing(!_scene.get_processing_state());
 }
 
 /// This slot is called when the \a pause \a button was clicked by the user.
 void ssr::QUserInterface::_pause_button_pressed()
 {
-  _controller.transport_stop();
+  _controller.take_control()->transport_stop();
 }
 
 /// This slot is called when the \a play \a button was clicked by the user.
 void ssr::QUserInterface::_play_button_pressed()
 {
-  _controller.transport_start();
+  _controller.take_control()->transport_start();
 }
 
 /** This function is called whenever the fiel menu actions (open/close etc.)
@@ -534,7 +491,7 @@ void ssr::QUserInterface::_create_scene_menu(const std::string& path_to_scene_me
 
       // Add button to list
       _scene_button_list.push_back(button_buffer);
-      
+
       // increment _scene counter
       no_of_scenes++;
     } // if
@@ -567,7 +524,7 @@ void ssr::QUserInterface::_set_master_volume(float volume)
   volume = std::max(volume, MINVOLUME);
 
   // convert to linear scale
-  _controller.set_master_volume(apf::math::dB2linear(volume));
+  _controller.take_control()->master_volume(apf::math::dB2linear(volume));
 }
 
 /** Changes selected sources' volume.
@@ -575,6 +532,7 @@ void ssr::QUserInterface::_set_master_volume(float volume)
  */
 void ssr::QUserInterface::_change_volume_of_selected_sources(float d_volume)
 {
+  auto control = _controller.take_control();
 
   for (selected_sources_map_t::iterator i = _selected_sources_map.begin(); i != _selected_sources_map.end(); i++)
   {
@@ -584,23 +542,23 @@ void ssr::QUserInterface::_change_volume_of_selected_sources(float d_volume)
     current_gain = std::min(current_gain, dB2linear(MAXVOLUME));
     current_gain = std::max(current_gain, dB2linear(MINVOLUME));
 
-    _controller.set_source_gain(i->second, current_gain);
-   
+    control->source_volume(_scene.string_id(i->second), current_gain);
+
   } // for
 }
 
 /// Opens a save-file-as dialog.
 void ssr::QUserInterface::_save_file_as()
 {
-  QString file_name = QFileDialog::getSaveFileName(this, 
+  QString file_name = QFileDialog::getSaveFileName(this,
                         "Save scene in ASDF", ".", "ASDF files (*.asd)");
 
   // if aborted
-  if ( file_name.isEmpty() ) 
-  { 
+  if ( file_name.isEmpty() )
+  {
     VERBOSE("Scene not saved.");
-  } 
-  else 
+  }
+  else
   {
     // convert to std::string
     std::string file_name_std = file_name.toStdString();
@@ -611,7 +569,7 @@ void ssr::QUserInterface::_save_file_as()
       file_name_std.append(".asd");
     }
 
-    _controller.save_scene_as_XML(file_name_std);
+    _controller.take_control()->save_scene(file_name_std);
     VERBOSE("Scene saved in '" << file_name_std << "'.");
   }
 
@@ -647,7 +605,7 @@ void ssr::QUserInterface::_load_scene(const QString& path_to_scene)
     }
   }
 
-  _controller.load_scene(std::string(path_to_scene.toAscii()));
+  _controller.take_control()->load_scene(std::string(path_to_scene.toUtf8()));
 
   // clear mouse cursor
   setCursor(Qt::ArrowCursor);
@@ -657,6 +615,8 @@ void ssr::QUserInterface::_load_scene(const QString& path_to_scene)
 /** Updates all widgets on the screen including OpenGL stuff.*/
 void ssr::QUserInterface::_update_screen()
 {
+    this->set_device_pixel_ratio();
+
     // update time line
     _time_line->set_progress(static_cast<float>(_scene.get_transport_position())/
                             static_cast<float>(_scene.get_sample_rate()));
@@ -688,9 +648,9 @@ void ssr::QUserInterface::_update_screen()
     {
       // move the dialog to the desired position
       _update_source_properties_position();
-      
+
       // update displays of source properties dialog
-      _source_properties->update_displays(_scene.get_source(_id_of_last_clicked_source), 
+      _source_properties->update_displays(_scene.get_source(_id_of_last_clicked_source),
 					  _scene.get_reference());
     } // if
 
@@ -698,77 +658,12 @@ void ssr::QUserInterface::_update_screen()
     update();
 }
 
-#ifndef ENABLE_FLOATING_CONTROL_PANEL
-/** Checks if a mouse event occurred outside of the visible OpenGL window.
- * @param event incoming Qt event.
- * @return @b true if event occurred outside.
- */
-bool ssr::QUserInterface::_mouse_event_out_of_scope(QMouseEvent *event)
-{
-  if (event->x() < DEFAULTFRAMELEFT + 2
-      || event->x() > width() - DEFAULTFRAMERIGHT
-      || event->y() < DEFAULTFRAMETOP + 2
-      || event->y() > height() - DEFAULTFRAMEBOTTOM)
-  {
-    return true;
-  }
-
-  return false;
-}
-
-/** Catches mouse events which occurred outside of the visible OpenGL widget.
- * @param event incoming Qt event.
- * @return @b true if event was caught.
- */
-bool ssr::QUserInterface::event(QEvent *e)
-{
-  // check if mouse action starts outside of scope
-  if (e->type() == QEvent::MouseButtonPress
-      || e->type() == QEvent::MouseButtonDblClick)
-  {
-
-    // close text edit in time line if visible
-    //_time_line->reset_appearence();
-
-    QMouseEvent *mouse_event = (QMouseEvent *)e;
-    if (_mouse_event_out_of_scope(mouse_event))
-    {
-      _ignore_mouse_events = true;
-      return true;
-    }
-    else _ignore_mouse_events = false;
-  }
-
-  else if (e->type() == QEvent::MouseMove && _ignore_mouse_events)
-  {
-    return true;
-  }
-
-  return QOpenGLPlotter::event(e);
-}
-#endif
-
 /** Handles Qt resize events.
  * @param event Qt resize event.
  */
 void ssr::QUserInterface::resizeEvent(QResizeEvent *event)
 {
   QOpenGLPlotter::resizeEvent(event);
-
-#ifndef ENABLE_FLOATING_CONTROL_PANEL
-  // resize frame
-  _frame->resize(DEFAULTFRAMETOP, DEFAULTFRAMEBOTTOM, DEFAULTFRAMELEFT, DEFAULTFRAMERIGHT);
-
-  // horizontal arrangement of buttons in pixels:
-  // frame            file menu                        proc. but.
-  // DEFAULTFRAMELEFT FILEMENUWIDTH BETWEENBUTTONSPACE BUTTONWIDTH BETWEENBUTTONSPACE
-  // skip button                    pause                          play
-  // BUTTONWIDTH BETWEENBUTTONSPACE BUTTONWIDTH BETWEENBUTTONSPACE BUTTONWIDTH
-  //
-  // 3*BETWEENBUTTONSPACE
-
-  _resizeControls(width());
-#endif
 }
 
 void ssr::QUserInterface::_resizeControls(int newWidth)
@@ -776,10 +671,10 @@ void ssr::QUserInterface::_resizeControls(int newWidth)
   const int _time_line_position_x = DEFAULTFRAMELEFT+FILEMENUWIDTH+
   4*(BETWEENBUTTONSPACE+BUTTONWIDTH)+
   BETWEENLABELSPACE - 12; // the 12 is due to LEFTMARGIN in qssrtimeline.cpp
-  
+
   const int _zoom_label_position_x = newWidth - DEFAULTFRAMERIGHT + 3 -
   FILEMENUWIDTH - 2*BUTTONWIDTH - 2*BETWEENLABELSPACE;
-  
+
   // if there is space then show the _time_line
   if (width()-DEFAULTFRAMERIGHT-FILEMENUWIDTH-150 > _time_line_position_x + 30)
   {
@@ -788,13 +683,13 @@ void ssr::QUserInterface::_resizeControls(int newWidth)
     _time_line->show();
   }
   else _time_line->hide();
-  
+
   // if there is space then show the _zoom_label
   if (_zoom_label_position_x > _time_line_position_x - BETWEENLABELSPACE)
   {
     _zoom_label->setGeometry(_zoom_label_position_x, 30, BUTTONWIDTH, 15);
     _zoom_label_text_tag->setGeometry(_zoom_label_position_x, 15, BUTTONWIDTH, 15);
-    
+
     _zoom_label->show();
     _zoom_label_text_tag->show();
   }
@@ -803,7 +698,7 @@ void ssr::QUserInterface::_resizeControls(int newWidth)
     _zoom_label->hide();
     _zoom_label_text_tag->hide();
   }
-  
+
   // if there is space then show the _cpu_label
   if (_zoom_label_position_x > _time_line_position_x - 2*BETWEENLABELSPACE - BUTTONWIDTH)
   {
@@ -811,22 +706,22 @@ void ssr::QUserInterface::_resizeControls(int newWidth)
                             30, BUTTONWIDTH, 15);
     _cpu_label_text_tag->setGeometry(_zoom_label_position_x+BUTTONWIDTH+
                                      BETWEENLABELSPACE, 15, BUTTONWIDTH, 15 );
-    
+
     _cpu_label->show();
     _cpu_label_text_tag->show();
-    
+
   }
   else
   {
     _cpu_label->hide();
     _cpu_label_text_tag->hide();
   }
-  
+
   _volume_slider->setGeometry(newWidth - DEFAULTFRAMERIGHT - FILEMENUWIDTH + 3, 30, FILEMENUWIDTH, 25);
   _volume_slider_text_tag->setGeometry(newWidth - DEFAULTFRAMERIGHT - FILEMENUWIDTH + 3, 15, FILEMENUWIDTH, 15 );
-  
+
   int no_of_scenes = 0;
-  
+
   // check which scene buttons are visible
   if (!_scene_button_list.empty())
   {
@@ -839,19 +734,19 @@ void ssr::QUserInterface::_resizeControls(int newWidth)
         (*i)->show();
       }
       else (*i)->hide();
-      
+
       no_of_scenes++;
     }
   }
-}  
+}
 
 /** Handles Qt mouse press events.
  * @param event Qt mouse event.
  */
 void ssr::QUserInterface::mousePressEvent(QMouseEvent *event)
 {
-  ssr::id_t _id_of_lastlast_clicked_source = _id_of_last_clicked_source;
-  
+  unsigned int _id_of_lastlast_clicked_source = _id_of_last_clicked_source;
+
   event->accept();
 
   _volume_slider_selected = false;
@@ -892,7 +787,7 @@ void ssr::QUserInterface::mousePressEvent(QMouseEvent *event)
   {
     // hide source properties dialog
     _source_properties->hide();
-    
+
     // no source was clicked
     if (event->button() == Qt::LeftButton) _deselect_all_sources();
     return;
@@ -937,15 +832,22 @@ void ssr::QUserInterface::mousePressEvent(QMouseEvent *event)
   _x_offset = source_position->x - pos_x;
   _y_offset = source_position->y - pos_y;
 
-  // right click on source
-  if (event->button() == Qt::RightButton && selected_object % NAMESTACKSTEP == 1)
+  // click on source
+  if (selected_object % NAMESTACKSTEP == 1)
   {
-    if (_source_properties->isVisible() && _id_of_last_clicked_source == _id_of_lastlast_clicked_source)
-      _source_properties->hide();
-    else
+    // right click on source -> either hide source properties or show properties of new source
+    if (event->button() == Qt::RightButton)
     {
-      _update_source_properties_position();
-      _source_properties->show();
+      if (_source_properties->isVisible() && _id_of_last_clicked_source == _id_of_lastlast_clicked_source)
+        _source_properties->hide();
+      else
+      {
+        _update_source_properties_position();
+        _source_properties->show();
+      }
+    } else if (event->button() == Qt::LeftButton) // left click on source -> source properties stay on top
+    {
+      _source_properties->raise();
     }
   }
 }
@@ -972,25 +874,27 @@ void ssr::QUserInterface::mouseMoveEvent(QMouseEvent *event)
     Position d_position = position -
       *_scene.get_source_position(_id_of_last_clicked_source);
 
+    auto control = _controller.take_control();
+
     // move all selected sources
     for (selected_sources_map_t::iterator i = _selected_sources_map.begin(); i != _selected_sources_map.end(); i++)
     {
-      // rotate complex sources by the appropriate angle 
-      if (_scene.get_source_model(i->second) == Source::directional ||
-               _scene.get_source_model(i->second) == Source::extended)
+      // rotate complex sources by the appropriate angle
+      if (_scene.get_source_model(i->second) == LegacySource::directional ||
+               _scene.get_source_model(i->second) == LegacySource::extended)
       {
         // position delta expressed as angle
         Orientation d_orientation = (*_scene.get_source_position(i->second) + d_position).orientation() -
             (*_scene.get_source_position(i->second)).orientation();
 
         // set the new orientation
-        _controller.set_source_orientation(i->second,
+        control->source_rotation(_scene.string_id(i->second),
                 (*_scene.get_source_orientation(i->second)) + d_orientation);
       } // if
 
       // finally set the source's position
       // plane waves and point sources will automatically face the reference
-      _controller.set_source_position(i->second,
+      control->source_position(_scene.string_id(i->second),
                 *_scene.get_source_position(i->second) + d_position);
 
     } // for
@@ -1020,14 +924,16 @@ void ssr::QUserInterface::mouseMoveEvent(QMouseEvent *event)
     // previous position relative to source position
     prev_mouse_pos -= *_scene.get_source_position(_id_of_last_clicked_source);
 
+    auto control = _controller.take_control();
+
     // rotate all selected sources that can be rotated
     for (selected_sources_map_t::iterator i = _selected_sources_map.begin();
          i != _selected_sources_map.end(); i++)
     {
-      if (_scene.get_source_model(i->second) == Source::directional ||
-          _scene.get_source_model(i->second) == Source::extended)
+      if (_scene.get_source_model(i->second) == LegacySource::directional ||
+          _scene.get_source_model(i->second) == LegacySource::extended)
       {
-        _controller.set_source_orientation(i->second,
+        control->source_rotation(_scene.string_id(i->second),
                 (*_scene.get_source_orientation(i->second)) +
                 (mouse_pos.orientation() - prev_mouse_pos.orientation()));
       }
@@ -1058,7 +964,7 @@ void ssr::QUserInterface::mouseMoveEvent(QMouseEvent *event)
       // change gain
       if (gain > MINVOLUME && gain <= MAXVOLUME)
       {
-        _controller.set_source_gain(i->second, dB2linear(gain));
+        _controller.take_control()->source_volume(_scene.string_id(i->second), dB2linear(gain));
       }
     } // for
 
@@ -1087,7 +993,7 @@ void ssr::QUserInterface::mouseMoveEvent(QMouseEvent *event)
     // previous position relative to relative position
     prev_mouse_pos -= _scene.get_reference().position;
 
-    _controller.set_reference_orientation(_scene.get_reference().orientation +
+    _controller.take_control()->reference_rotation(_scene.get_reference().orientation +
                                           (mouse_pos.orientation() - prev_mouse_pos.orientation()));
 
   } // else if
@@ -1103,7 +1009,7 @@ void ssr::QUserInterface::mouseMoveEvent(QMouseEvent *event)
     position.x = static_cast<float>(pos_x + _x_offset);
     position.y = static_cast<float>(pos_y + _y_offset);
 
-    _controller.set_reference_position(position);
+    _controller.take_control()->reference_position(position);
   } // else if
 
   // right click on background
@@ -1144,11 +1050,7 @@ void ssr::QUserInterface::_update_source_properties_position()
   _get_pixel_pos(source_position->x, source_position->y,
 		 0,&x, &y);
 
-#ifdef __APPLE__
   _source_properties->move(QPoint(this->x() + x + 100, this->y() + y));
-#else
-  _source_properties->move(QPoint(x + 100, y));
-#endif
 
 }
 
@@ -1172,8 +1074,8 @@ void ssr::QUserInterface::mouseDoubleClickEvent(QMouseEvent *event)
     // restore zoom
     _set_zoom(100);
   }
-  else 
-  { 
+  else
+  {
     // double click on source
     if (_source_properties->isVisible())
     {
@@ -1201,7 +1103,6 @@ void ssr::QUserInterface::mouseReleaseEvent (QMouseEvent *event)
   }
 }
 
-#ifdef ENABLE_FLOATING_CONTROL_PANEL
 /** Catches Qt key press events for floating control panel.
  * @param sender Qt object that sent the event.
  * @param event The event itself.
@@ -1217,7 +1118,6 @@ bool ssr::QUserInterface::eventFilter(QObject *sender, QEvent *event)
   }
   return false;
 }
-#endif
 
 /** Handles Qt key press events.
  * @param event Qt key event.
@@ -1236,8 +1136,8 @@ void ssr::QUserInterface::keyPressEvent(QKeyEvent *event)
   case Qt::Key_Down: _window_y_offset += 0.1f; update(); break;
   case Qt::Key_Left: _window_x_offset += 0.1f; update(); break;
   case Qt::Key_Right: _window_x_offset -= 0.1f; update(); break;
-  case Qt::Key_Space: if (_scene.is_playing()) _controller.transport_stop();
-                      else _controller.transport_start();
+  case Qt::Key_Space: if (_scene.is_playing()) _controller.take_control()->transport_stop();
+                      else _controller.take_control()->transport_start();
                       break;
   case Qt::Key_Backspace: _skip_back(); break;
 
@@ -1245,23 +1145,23 @@ void ssr::QUserInterface::keyPressEvent(QKeyEvent *event)
   case Qt::Key_A: if (event->modifiers() == Qt::ControlModifier) _select_all_sources(); break;
   case Qt::Key_F: _toggle_fixation_state_of_selected_sources(); break;
   case Qt::Key_M: _toggle_mute_state_of_selected_sources(); break;
-  case Qt::Key_P: _toggle_source_models(); break;  
-  case Qt::Key_R: _controller.set_auto_rotation(!_scene.get_auto_rotation()); break;
+  case Qt::Key_P: _toggle_source_models(); break;
+  case Qt::Key_R: _controller.take_control()->auto_rotate_sources(!_scene.get_auto_rotation()); break;
 
-  case Qt::Key_S: if ( event->modifiers() == Qt::ControlModifier ) 
+  case Qt::Key_S: if ( event->modifiers() == Qt::ControlModifier )
                   {
                     _save_file_as();
                   }
-                  else if (_selected_sources_map.empty()) 
+                  else if (_selected_sources_map.empty())
                   {
                     _unsolo_all_sources();
                   }
-		  else _solo_selected_sources(); 
+		  else _toggle_solo_state_of_selected_sources();
                   break;
 
-  case Qt::Key_T: if ( event->modifiers() == Qt::ControlModifier ) 
+  case Qt::Key_T: if ( event->modifiers() == Qt::ControlModifier )
                   {
-		    _time_line->show_time_edit(); 
+		    _time_line->show_time_edit();
                   }
                   break;
 
@@ -1278,23 +1178,24 @@ void ssr::QUserInterface::keyPressEvent(QKeyEvent *event)
 
     // miscellaneous actions
   case Qt::Key_Plus: if (_selected_sources_map.empty())
-		     { 
+		     {
 		       // change master level
 		       _set_master_volume(linear2dB(_scene.get_master_volume() + 0.00001f) + 1.0f); // min -100dB
 		     }
                      // change selected sources level
 		     else _change_volume_of_selected_sources(1.0f);
-                     break;   
+                     break;
   case Qt::Key_Minus: if (_selected_sources_map.empty())
-		     { 
+		     {
 		       // change master level
 		       _set_master_volume(linear2dB(_scene.get_master_volume() + 0.00001f) - 1.0f); // min -100dB
 		     }
                      // change selected sources level
 		     else _change_volume_of_selected_sources(-1.0f);
-                     break; 
-  case Qt::Key_Return: {_controller.calibrate_client(); break; }
+                     break;
+  case Qt::Key_Return: {_controller.take_control()->calibrate_tracker(); break; }
   case Qt::Key_Control: {_ctrl_pressed = true; break; }
+  case Qt::Key_Shift: {_shift_pressed = true; break; }
   case Qt::Key_Alt: {_alt_pressed = true; break; }
   case Qt::Key_F11: {if (!isFullScreen()) setWindowState(Qt::WindowFullScreen);
       else setWindowState( Qt::WindowNoState );} break;
@@ -1314,6 +1215,7 @@ void ssr::QUserInterface::keyReleaseEvent(QKeyEvent *event)
     switch (event->key()){
     case Qt::Key_Control: {_ctrl_pressed = false; break; }
     case Qt::Key_Alt: {_alt_pressed = false; break; }
+    case Qt::Key_Shift: {_shift_pressed = false; break; }
     default: ;
     }
 }
@@ -1328,6 +1230,52 @@ void ssr::QUserInterface::wheelEvent(QWheelEvent *event)
   // update zoom
   _set_zoom(static_cast<int>(_zoom_factor/STDZOOMFACTOR *
                              (100.0f+event->delta()/100.f*5.0f) + 0.5f));
+}
+
+/** Handles Qt drag & drop events.
+ * @param event Qt mouse drag enter event.
+ */
+void ssr::QUserInterface::dragEnterEvent(QDragEnterEvent *event)
+{
+  // make sure that the drag event contains file paths
+  if (event->mimeData()->hasUrls()) event->acceptProposedAction();
+  //if (event->mimeData()->hasFormat("text/plain"))
+   // event->acceptProposedAction();
+}
+
+/** Handles Qt drag & drop events.
+ * @param event Qt mouse drop event.
+ */
+void ssr::QUserInterface::dropEvent(QDropEvent *event)
+{
+  event->acceptProposedAction();
+
+  const QMimeData* mimeData = event->mimeData();
+
+  // check for our needed mime type, here a file or a list of files
+  if (mimeData->hasUrls())
+  {
+    QList<QUrl> urlList = mimeData->urls();
+
+    QUrl url(urlList.at(0));
+
+    VERBOSE("Dropped file: " <<
+      std::string(url.toString().toStdString()));
+
+    // Remove "file://"
+    //this->_load_scene(url.toString().toStdString().substr(7));
+    this->_load_scene(url.toString().remove(0,7));
+
+    // TODO: Add source if more than one file is dragged and dropped.
+    //QStringList pathList;
+    // for (int i = 0; i < urlList.size() && i < 32; +i)
+    //{
+    //  pathList.append(urlList.at(i).toLocalFile());
+    //}
+    // call a function to open all files (needs function is yet to be written)
+    //openFiles(pathList);
+
+   }
 }
 
 /// Displays the about window.
@@ -1377,7 +1325,7 @@ void ssr::QUserInterface::_show_about_window()
 
   // text_label.setGeometry(0, 261, 350, 370);
   text_label.setText(about_string.c_str());
-  text_label.setIndent(20); 
+  text_label.setIndent(20);
   text_label.setAlignment(Qt::AlignTop);
   text_label.adjustSize();
 
@@ -1393,7 +1341,7 @@ void ssr::QUserInterface::_show_about_window()
 
   connect(&ssr_logo, SIGNAL(clicked()), &about_window, SLOT(close()));
   connect(&text_label, SIGNAL(clicked()), &about_window, SLOT(close()));
- 
+
   about_window.exec();
 }
 
@@ -1402,80 +1350,125 @@ void ssr::QUserInterface::_show_about_window()
  */
 void ssr::QUserInterface::_set_source_mute(const bool flag)
 {
-  _controller.set_source_mute(_id_of_last_clicked_source, flag);
+  _controller.take_control()->source_mute(_scene.string_id(_id_of_last_clicked_source), flag);
 }
 
 /// Toggles the mute state of all selected sound sources
 void ssr::QUserInterface::_toggle_mute_state_of_selected_sources()
 {
+  auto control = _controller.take_control();
   // iterate over selected sources
   for (  selected_sources_map_t::iterator i = _selected_sources_map.begin();
          i != _selected_sources_map.end(); i++)
   {
-    _controller.set_source_mute(i->second,
+    control->source_mute(_scene.string_id(i->second),
                                 !_scene.get_source_mute_state(i->second));
   }
 }
 
+void ssr::QUserInterface::_toggle_solo_state_of_selected_sources()
+{
+  // get sources
+  source_buffer_list_t source_buffer_list;
+  _scene.get_sources(source_buffer_list);
+
+  auto control = _controller.take_control();
+
+  for (selected_sources_map_t::iterator i = _selected_sources_map.begin();
+       i != _selected_sources_map.end(); i++)
+  {
+    if (_soloed_sources.find(i->second) == _soloed_sources.end())
+    {
+      // solo source
+      _soloed_sources.insert(i->second);
+      // make sure it's not muted
+      control->source_mute(_scene.string_id(i->second), false);
+
+      // mute other sources
+      for (source_buffer_list_t::const_iterator j = source_buffer_list.begin();
+      j != source_buffer_list.end(); j++)
+      {
+        // if source is not soloed
+        if (_soloed_sources.find(j->id) == _soloed_sources.end())
+        {
+          // then mute it
+          control->source_mute(_scene.string_id(j->id), true);
+        }
+      }
+    }
+    else
+    {
+      // unsolo source
+      _soloed_sources.erase(i->second);
+      // unmute sources
+      for (source_buffer_list_t::const_iterator j = source_buffer_list.begin();
+      j != source_buffer_list.end(); j++)
+      {
+        control->source_mute(_scene.string_id(j->id), false);
+      }
+    }
+  } // for
+}
+
 void ssr::QUserInterface::_toggle_source_models()
 {
+  auto control = _controller.take_control();
   // toggle all source types between "plane" and "point"
   for (selected_sources_map_t::iterator i = _selected_sources_map.begin(); i != _selected_sources_map.end(); i++)
   {
     // if source is plane then make sure that it faces the reference
-    if (_scene.get_source_model(i->second) == Source::plane)
+    if (_scene.get_source_model(i->second) == LegacySource::plane)
     {
-      _controller.set_source_model(i->second, Source::point);
+      control->source_model(_scene.string_id(i->second), apf::str::A2S(LegacySource::point));
     }
-    else if (_scene.get_source_model(i->second) == Source::point)
+    else if (_scene.get_source_model(i->second) == LegacySource::point)
     {
-      _controller.set_source_model(i->second, Source::plane);      
+      control->source_model(_scene.string_id(i->second), apf::str::A2S(LegacySource::plane));
     } // if
   } // for
 }
 
-/** Sets the position fixed state of the currently active mouse.  
+/** Sets the position fixed state of the currently active mouse.
  * @param flag \a true or \a false
  */
 void ssr::QUserInterface::_set_source_position_fixed(const bool flag)
 {
-  _controller.set_source_position_fixed(_id_of_last_clicked_source, flag);
+  _controller.take_control()->source_fixed(_scene.string_id(_id_of_last_clicked_source), flag);
 }
 
-/** Sets the position fixed state of the currently active mouse.  
- * @param index \a 0="plane wave" \a 1="point source" 
+/** Sets the position fixed state of the currently active mouse.
+ * @param index \a 0="plane wave" \a 1="point source"
  */
 void ssr::QUserInterface::_set_source_model(const int index)
 {
-  Source::model_t model = Source::unknown;
-  
+  LegacySource::model_t model = LegacySource::unknown;
+
   switch(index){
     case 0:
-      model = Source::plane;
+      model = LegacySource::plane;
       break;
     case 1:
-      model = Source::point;
+      model = LegacySource::point;
       break;
   }
   VERBOSE("index: " << index);
 
-  ssr::id_t id = _id_of_last_clicked_source;
-  _controller.set_source_model(id, model);
+  unsigned int id = _id_of_last_clicked_source;
+  auto control = _controller.take_control();
+  control->source_model(_scene.string_id(id), apf::str::A2S(model));
   // make sure that the plane wave is oriented towards the reference point
-  _controller.set_source_orientation(id, (_scene.get_reference().position
+  control->source_rotation(_scene.string_id(id), (_scene.get_reference().position
         - *_scene.get_source_position(id)).orientation());
 }
 
 void ssr::QUserInterface::_toggle_fixation_state_of_selected_sources()
 {
+  auto control = _controller.take_control();
   // iterate over selected sources
   for (  selected_sources_map_t::iterator i = _selected_sources_map.begin();
          i != _selected_sources_map.end(); i++)
   {
-    _controller.set_source_position_fixed(i->second,
+    control->source_fixed(_scene.string_id(i->second),
                                 !_scene.get_source_position_fixed(i->second));
   }
 }
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

@@ -157,7 +157,7 @@ BinauralRenderer::_load_hrtfs(const std::string& filename, size_t size)
     = std::max_element(transpose.slices.begin()->begin()
       , transpose.slices.begin()->end(), _cmp_abs);
 
-  int index = std::distance(transpose.slices.begin()->begin(), maximum);
+  int index = static_cast<int>(std::distance(transpose.slices.begin()->begin(), maximum));
 
   auto impulse = apf::fixed_vector<sample_type>(index + 1);
   impulse.back() = 1;
@@ -277,8 +277,8 @@ void BinauralRenderer::Source::_process()
 
   float source_distance = (this->position - ref_pos).length();
 
-  if (this->weighting_factor != 0 && source_distance < 0.5f 
-        && this->model != ::Source::plane)
+  if (this->weighting_factor != 0 && source_distance < 0.5f
+        && this->model != "plane")
   {
     interp_factor = 1.0f - 2 * source_distance;
   }
@@ -286,12 +286,12 @@ void BinauralRenderer::Source::_process()
   _interp_factor = interp_factor;  // Assign (once!) to BlockParameter
   _weight = this->weighting_factor;  // ... same here
 
-  float angles = _input.parent._angles;
+  auto angles = static_cast<float>(_input.parent._angles);
 
   // calculate relative orientation of sound source
   auto rel_ori = -ref_ori;
 
-  if (this->model == ::Source::plane)
+  if (this->model == "plane")
   {
     // plane wave orientation points into direction of propagation
     // +180 degree has to be applied to select the hrtf correctly
@@ -383,6 +383,3 @@ void BinauralRenderer::Source::_process()
 }  // namespace ssr
 
 #endif
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

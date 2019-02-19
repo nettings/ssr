@@ -25,17 +25,59 @@
  ******************************************************************************/
 
 /// @file
-/// Main file for NFC HOA renderer.
+/// Geometry information of a point including an orientation (definition).
 
-#include "controller.h"
-#include "nfchoarenderer.h"
+#ifndef SSR_LEGACY_DIRECTIONALPOINT_H
+#define SSR_LEGACY_DIRECTIONALPOINT_H
 
-int main(int argc, char* argv[])
+#include <iosfwd>
+
+#include "legacy_position.h"
+#include "legacy_orientation.h"
+
+/** Class which combines Position and Orientation.
+ * Anything which <b>has a</b> position and orientation can be derived from it.
+ **/
+struct DirectionalPoint
 {
-  ssr::Controller<ssr::NfcHoaRenderer> controller(argc, argv);
+  DirectionalPoint() {} ///< standard ctor
+  DirectionalPoint(const Position& position, const Orientation& orientation);
 
-  controller.run();
-}
+  Position    position;    ///< position
+  Orientation orientation; ///< orientation
 
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent
+  /// Distance between a plane (*this) and a point
+  float plane_to_point_distance(const Position& point) const;
+
+  DirectionalPoint& rotate(float angle); ///< rotate around the origin
+  /// rotate around the origin
+  DirectionalPoint& rotate(const Orientation& rotation);
+  /// move and rotate
+  DirectionalPoint& transform(const DirectionalPoint& t);
+
+  DirectionalPoint& operator+=(const DirectionalPoint& other);
+  DirectionalPoint& operator-=(const DirectionalPoint& other);
+
+  friend DirectionalPoint operator+(const DirectionalPoint& a,
+      const DirectionalPoint& b);
+  friend DirectionalPoint operator-(const DirectionalPoint& a,
+      const DirectionalPoint& b);
+  friend std::ostream& operator<<(std::ostream& stream,
+      const DirectionalPoint& point);
+
+  /** division (/) operator.
+   * @param a dividend, a DirectionalPoint.
+   * @param b divisor, any numeric Type..
+   * @return quotient.
+   **/
+  template <typename T>
+  friend DirectionalPoint operator/(const DirectionalPoint& a, const T& b)
+  {
+    return DirectionalPoint(a.position / b, a.orientation / b);
+  }
+};
+
+/// Angle between the Orientations of two DirectionalPoints.
+float angle(const DirectionalPoint& a, const DirectionalPoint& b);
+
+#endif

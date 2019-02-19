@@ -3,10 +3,11 @@
 # Makefile example:
 # http://www.klab.caltech.edu/~harel/share/gbvs_scale/sift/Makefile
 
-MEXFILES ?= ssr_nfc_hoa ssr_binaural ssr_vbap ssr_aap ssr_wfs ssr_generic \
+MEXFILES ?= ssr_dca ssr_binaural ssr_vbap ssr_aap ssr_wfs ssr_generic \
   ssr_brs
 
-OBJECTS := ssr_global position orientation directionalpoint xmlparser
+OBJECTS := ssr_global legacy_position legacy_orientation \
+  legacy_directionalpoint xmlparser
 
 LIBRARIES += libxml-2.0 fftw3f sndfile
 
@@ -15,7 +16,7 @@ SRC_DIR ?= ../src
 MEX ?= mex -v
 OCT ?= mkoctfile --mex --verbose
 
-CXXFLAGS += -std=c++11
+CXXFLAGS += -std=c++17
 
 # optimization:
 CXXFLAGS_OPT += -O3
@@ -39,7 +40,8 @@ CXXFLAGS += -Wall -Wextra
 CXXFLAGS += -pedantic
 # warnings are errors
 CXXFLAGS += -pedantic-errors
-CXXFLAGS += -Werror
+# TODO: re-enable when deprecated dynamic exception specifications are removed:
+#CXXFLAGS += -Werror
 # even more warnings:
 CXXFLAGS += -Wpointer-arith
 CXXFLAGS += -Wcast-align

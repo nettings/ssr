@@ -27,7 +27,7 @@
 /// @file
 /// TODO: add description
 
-#include <QPainter>
+#include <QtGui/QPainter>
 
 #include "qscenebutton.h"
 
@@ -94,6 +94,3 @@ void QSceneButton::paintEvent( QPaintEvent * event)
   // display text
   painter.drawText(QPointF(10.0f, 13.0f), text);
 }
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

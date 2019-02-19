@@ -30,8 +30,8 @@
 #ifndef SSR_QCPULABEL_H
 #define SSR_QCPULABEL_H
 
-#include <QLabel>
-#include <QPaintEvent>
+#include <QtGui/QPaintEvent>
+#include <QtWidgets/QLabel>
 
 /// QCPULabel
 class QCPULabel : public QLabel
@@ -49,6 +49,3 @@ class QCPULabel : public QLabel
 };
 
 #endif
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

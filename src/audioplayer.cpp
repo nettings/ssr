@@ -27,8 +27,10 @@
 /// @file
 /// Audio player using ecasound (implementation).
 
-#include <jack/jack.h> // for jack_client_name_size()
 #include <algorithm>
+#include <thread>   // std::this_thread::sleep_for
+#include <chrono>   // std::chrono::microseconds
+#include <jack/jack.h> // for jack_client_name_size()
 
 #include "audioplayer.h"
 #include "maptools.h"
@@ -197,7 +199,7 @@ AudioPlayer::Soundfile::_get_jack_sample_rate()
  * don't have that many ...
  **/
 AudioPlayer::Soundfile::Soundfile(const std::string& filename, bool loop,
-    const std::string& prefix) throw (soundfile_error) :
+    const std::string& prefix) :
   output_prefix(prefix),
   _filename(filename),
   _client_name(""),
@@ -282,7 +284,7 @@ AudioPlayer::Soundfile::Soundfile(const std::string& filename, bool loop,
   // It takes a little time until the client is available
   // This is a little ugly, but I don't know a better way to do it.
   // If you know one, tell me, please!
-  usleep(ssr::usleeptime);
+  std::this_thread::sleep_for(std::chrono::microseconds(ssr::usleeptime));
   VERBOSE2("Added '" + _filename
       + "', format: '" + apf::str::A2S(_sample_format)
       + "', channels: " + apf::str::A2S(_channels)
@@ -326,6 +328,3 @@ long int AudioPlayer::Soundfile::get_length() const
 {
   return _length_samples;
 }
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

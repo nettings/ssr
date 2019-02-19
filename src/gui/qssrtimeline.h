@@ -30,15 +30,15 @@
 #ifndef SSR_QTIMELINE_H
 #define SSR_QTIMELINE_H
 
-#include <QLabel>
-#include <QLineEdit>
-#include <QPoint>
-#include <QMouseEvent>
-#include <QPaintEvent>
+#include <QtCore/QPoint>
+#include <QtGui/QMouseEvent>
+#include <QtGui/QPaintEvent>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QLineEdit>
 
 #include "qtimeedit.h"
 
-/// Qtimeline 
+/// Qtimeline
 class QSSRTimeLine : public QLabel
 {
   Q_OBJECT
@@ -57,7 +57,7 @@ class QSSRTimeLine : public QLabel
     float        _progress_at_mouse_click;
     QString      _previous_time;
 
-    QTimeEdit*   _time_edit;
+    QSSRTimeEdit*   _time_edit;
 
   protected:
     virtual void mousePressEvent(QMouseEvent *event);
@@ -74,6 +74,3 @@ class QSSRTimeLine : public QLabel
 };
 
 #endif
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

@@ -27,7 +27,8 @@
 /// @file
 /// Audio recorder using ecasound (implementation).
 
-#include <unistd.h>  // for usleep()
+#include <thread>   // std::this_thread::sleep_for
+#include <chrono>   // std::chrono::microseconds
 
 #include "audiorecorder.h"
 #include "ssr_global.h"
@@ -57,8 +58,7 @@
  **/
 AudioRecorder::AudioRecorder(const std::string& audio_file_name,
     const std::string& format_string, const std::string& record_source,
-    const std::string& client_name_,  const std::string& input_prefix_)
-    throw (audiorecorder_error) :
+    const std::string& client_name_,  const std::string& input_prefix_) :
   client_name(client_name_),
   input_prefix(input_prefix_)
 {
@@ -102,7 +102,7 @@ AudioRecorder::AudioRecorder(const std::string& audio_file_name,
   // It takes a little time until the client is available
   // This is a little ugly, but I don't know a better way to do it.
   // If you know one, tell me, please!
-  usleep(ssr::usleeptime);
+  std::this_thread::sleep_for(std::chrono::microseconds(ssr::usleeptime));
 }
 
 /// disconnects from ecasound
@@ -133,6 +133,3 @@ bool AudioRecorder::disable()
   }
   return true;
 }
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

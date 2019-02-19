@@ -30,22 +30,22 @@
 #ifndef SSR_QTIMEEDIT_H
 #define SSR_QTIMEEDIT_H
 
-#include <QLineEdit>
-#include <QKeyEvent>
+#include <QtGui/QKeyEvent>
+#include <QtWidgets/QLineEdit>
 
-/// for QSSRTimeLine 
-class QTimeEdit : public QLineEdit
+/// for QSSRTimeLine
+
+class QSSRTimeEdit : public QLineEdit
 {
   Q_OBJECT
 
   public:
-    QTimeEdit( QWidget* parent = 0 );
+    explicit QSSRTimeEdit(QWidget *parent = Q_NULLPTR);
+    ~QSSRTimeEdit();
+
 
   protected:
     virtual void keyPressEvent(QKeyEvent *event);
 };
 
 #endif
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

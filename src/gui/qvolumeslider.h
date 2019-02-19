@@ -30,10 +30,10 @@
 #ifndef SSR_QVOLUMESLIDER_H
 #define SSR_QVOLUMESLIDER_H
 
-#include <QLabel>
-#include <QPoint>
-#include <QMouseEvent>
-#include <QPaintEvent>
+#include <QtCore/QPoint>
+#include <QtGui/QMouseEvent>
+#include <QtGui/QPaintEvent>
+#include <QtWidgets/QLabel>
 
 /// QVolumeSlider
 class QVolumeSlider : public QLabel
@@ -60,6 +60,3 @@ class QVolumeSlider : public QLabel
 };
 
 #endif
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent

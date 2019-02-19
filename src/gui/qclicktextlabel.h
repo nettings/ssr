@@ -30,8 +30,8 @@
 #ifndef SSR_QCLICKTEXTLABEL_H
 #define SSR_QCLICKTEXTLABEL_H
 
-#include <QLabel>
-#include <QMouseEvent>
+#include <QtGui/QMouseEvent>
+#include <QtWidgets/QLabel>
 
 /// QClickTextLabel
 class QClickTextLabel : public QLabel
@@ -57,6 +57,3 @@ class QClickTextLabel : public QLabel
 };
 
 #endif
-
-// Settings for Vim (http://www.vim.org/), please do not remove:
-// vim:softtabstop=2:shiftwidth=2:expandtab:textwidth=80:cindent
